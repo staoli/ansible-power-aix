@@ -41,6 +41,7 @@ options:
     - C(script) to apply a script to customize NIM clients.
     - C(allocate) to allocate a resource to specified NIM clients.
     - C(deallocate) to deallocate a resource for specified NIM clients.
+    - C(install_fileset) to install filesets from the provided installp bundle.
     - C(bos_inst) to install BOS image to a given list of NIM clients.
     - C(define_script) to define a script NIM resource.
     - C(remove) to remove a specified NIM resource.
@@ -74,6 +75,10 @@ options:
     - C(latest_tl), C(latest_sp), C(next_tl) and C(next_sp) can be specified; based on the NIM
       server resources, nim will determine the actual oslevel necessary to update the targets;
       the update operation will be synchronous independently from C(asynchronous) value.
+    type: str
+  installp_bundle:
+    description:
+    - Specifies the installp bundle containing names of the filesets that need to be installed.
     type: str
   device:
     description:
@@ -527,6 +532,12 @@ def check_if_allocated(module, provided_lpp_source, targets):
     cmd = "lsnim -t lpp_source"
 
     targets = expand_targets(targets)
+
+    if not targets:
+        results['msg'] = f"No matching target found for targets \'{ module.params['targets'] }\'."
+        module.log('NIM - Error: ' + results['msg'])
+        module.fail_json(**results)
+
     new_targets = []
     cmd_failed = []
 
@@ -815,6 +826,80 @@ def perform_customization(module, lpp_source, target, is_async):
     else:
         results['meta'][target]['messages'].append(msg)
     return rc
+
+
+def install_filesets(module, params):
+    """
+    Install filesets on the specified nim client.
+
+    arguments:
+        module  (dict): The Ansible module.
+        target   (str): The nim client on which installation needs to be performed.
+    return:
+        a return code (0 if OK)
+    """
+
+    module.debug('NIM install filesets')
+
+    lpp_source = params['lpp_source']
+    installp_bundle = params['installp_bundle']
+
+    target_list = expand_targets(params['targets'])
+    if not target_list:
+        results['msg'] = f"No matching target found for targets \'{ params['targets'] }\'."
+        module.log('NIM - Error: ' + results['msg'])
+        module.fail_json(**results)
+
+    changed_val = 0
+
+    for target in target_list:
+        # Allocate the installp bundle
+
+        alloc_cmd = ['nim', '-o', 'allocate',
+                     '-a', 'lpp_source=' + lpp_source,
+                     '-a', 'installp_bundle=' + installp_bundle]
+        alloc_cmd.append(target)
+
+        rc, stdout, stderr = module.run_command(alloc_cmd)
+
+        results['meta'][target] = {}
+        results['meta'][target]['cmd'] = ' '.join(alloc_cmd)
+        results['meta'][target]['rc'] = rc
+        results['meta'][target]['stdout'] = stdout
+        results['meta'][target]['stderr'] = stderr
+
+        if rc:
+            msg = f"Couldn't install filesets - Allocation operation failed on {target}."
+            results['meta']['messages'].append(msg)
+            module.log('NIM - Error: ' + msg)
+            results['status'][target] = 'FAILURE'
+            continue
+
+        # Perform customization
+
+        cust_cmd = ['nim', '-o', 'cust']
+        cust_cmd.append(target)
+
+        rc, stdout, stderr = module.run_command(cust_cmd)
+
+        results['meta'][target]['cmd'] = ' '.join(cust_cmd)
+        results['meta'][target]['rc'] = rc
+        results['meta'][target]['stdout'] = stdout
+        results['meta'][target]['stderr'] = stderr
+
+        if rc:
+            msg = f"Couldn't install filesets - Customization operation failed on {target}."
+            results['meta']['messages'].append(msg)
+            module.log('NIM - Error: ' + msg)
+            results['status'][target] = 'FAILURE'
+        else:
+            if stdout.split()[-1] == "SUCCESS":
+                changed_val = 1
+            results['status'][target] = 'SUCCESS'
+
+    # Set changed to true if the filesets were installed, and were not already present
+    if changed_val:
+        results['changed'] = True
 
 
 def list_fixes(module, target):
@@ -2012,12 +2097,13 @@ def main():
                         choices=['update', 'master_setup', 'check', 'compare',
                                  'script', 'allocate', 'deallocate',
                                  'bos_inst', 'define_script', 'remove',
-                                 'reset', 'reboot', 'maintenance', 'show', 'register_client']),
+                                 'reset', 'reboot', 'maintenance', 'show', 'register_client', 'install_fileset']),
             lpp_source=dict(type='str'),
             targets=dict(type='list', elements='str'),
             new_targets=dict(type='list', elements='str'),  # The elements format is <machine name>-<login id>-<password>
             asynchronous=dict(type='bool', default=False),
             device=dict(type='str'),
+            installp_bundle=dict(type='str'),
             script=dict(type='str'),
             resource=dict(type='str'),
             location=dict(type='str'),
@@ -2040,6 +2126,7 @@ def main():
             ['action', 'reset', ['targets']],
             ['action', 'reboot', ['targets']],
             ['action', 'maintenance', ['targets']],
+            ['action', 'install_fileset', ['targets', 'lpp_source', 'installp_bundle']],
             ['action', 'register_client', ['new_targets']]
         ]
     )
@@ -2086,6 +2173,7 @@ def main():
     boot_client = module.params['boot_client']
     object_type = module.params['object_type']
     alt_disk_update_name = module.params['alt_disk_update_name']
+    installp_bundle = module.params['installp_bundle']
 
     params = {}
 
@@ -2153,6 +2241,12 @@ def main():
         params['resource'] = resource
         params['location'] = location
         nim_define_script(module, params)
+
+    elif action == 'install_fileset':
+        params['targets'] = targets
+        params['lpp_source'] = lpp_source
+        params['installp_bundle'] = installp_bundle
+        install_filesets(module, params)
 
     elif action == 'remove':
         params['resource'] = resource

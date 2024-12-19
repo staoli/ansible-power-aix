@@ -3,6 +3,111 @@
 #############################################################
 #############################################################
 
+# Code block for parallel/concurrent migration
+- name: Perform Parallel Migration
+  when: nim_alt_disk_migration_parallel_migration
+  block:
+    - name: Fail if nim_alt_disk_migration_nim_client is provided
+      when: nim_alt_disk_migration_nim_client|length != 0
+      ansible.builtin.fail:
+        msg: >
+          "'nim_alt_disk_migration_nim_client' and 'nim_alt_disk_migration_parallel_migration' are mutually exclusive."
+
+    - name: Fail if location of client data file is not provided
+      ansible.builtin.fail:
+        msg: You need to provide the location of file containing information about nim clients in case of parallel migration.
+      when: nim_alt_disk_migration_client_data|length == 0
+
+    - name: Fail if the client_data file's location is invalid
+      ansible.builtin.shell: |
+        ls {{ nim_alt_disk_migration_client_data }}
+      register: check_valid_location
+      changed_when: false
+      failed_when: check_valid_location.rc != 0
+
+    # Build command for parallel migration
+
+    - name: Basic command for parallel migration
+      ansible.builtin.set_fact:
+        parallel_migration_main_cmd: "nimadm -n -f {{ nim_alt_disk_migration_client_data }} -Y"
+
+    - name: Additional flags for the command if provided
+      block:
+        - name: Build command from empty string
+          ansible.builtin.set_fact:
+            additional_flags: ""
+
+        - name: Add default lpp source
+          when: nim_alt_disk_migration_lpp_source is defined and nim_alt_disk_migration_lpp_source|length != 0
+          ansible.builtin.set_fact:
+            additional_flags: "{{ additional_flags + ' -l ' + nim_alt_disk_migration_lpp_source }}"
+
+        - name: Add default spot
+          when: nim_alt_disk_migration_spot is defined and nim_alt_disk_migration_spot|length != 0
+          ansible.builtin.set_fact:
+            additional_flags: "{{ additional_flags + ' -s ' + nim_alt_disk_migration_spot }}"
+
+        - name: Add default installp bundle
+          when: nim_alt_disk_migration_nimadm_bundle is defined and nim_alt_disk_migration_nimadm_bundle|length != 0
+          ansible.builtin.set_fact:
+            additional_flags: "{{ additional_flags + ' -b ' + nim_alt_disk_migration_nimadm_bundle }}"
+
+        - name: Add default Pre-migration script if provided
+          when: nim_alt_disk_migration_nimadm_premig_script is defined and nim_alt_disk_migration_nimadm_premig_script|length != 0
+          ansible.builtin.set_fact:
+            additional_flags: "{{ additional_flags + ' -a ' + nim_alt_disk_migration_nimadm_premig_script }}"
+
+        - name: Add default Post-migration script if provided
+          when: nim_alt_disk_migration_nimadm_postmig_script is defined and nim_alt_disk_migration_nimadm_postmig_script|length != 0
+          ansible.builtin.set_fact:
+            additional_flags: "{{ additional_flags + ' -z ' +nim_alt_disk_migration_nimadm_postmig_script }}"
+
+    - name: Create the full command
+      when: additional_flags|length != 0
+      ansible.builtin.set_fact:
+        parallel_migration_main_cmd: "{{ parallel_migration_main_cmd + additional_flags }}"
+
+    - name: Display nimadm command for parallel migration
+      ansible.builtin.debug:
+        msg: "{{ parallel_migration_main_cmd }}"
+
+    - name: Run the parallel migration command
+      ansible.builtin.command: "{{ parallel_migration_main_cmd }}"
+      register: results
+      async: "{{ nim_alt_disk_migration_wait_nimadm_timeout_secs }}"
+      poll: 0
+      changed_when: true
+
+    - ansible.builtin.debug:  # var=results
+        msg:
+          - "timeout = {{ nim_alt_disk_migration_wait_nimadm_timeout_secs }} seconds or {{ nim_alt_disk_migration_wait_nimadm_timeout_hours }} hours "
+          - "Maximum retries: {{ nim_alt_disk_migration_retry_chk_nimadm_comp }} of {{ nim_alt_disk_migration_interval }} seconds"
+
+    - ansible.builtin.debug:
+        var: results
+
+    - name: "Polling until migration finishes (ignore FAILED RETRING messages) "
+      ansible.builtin.async_status:
+        jid: "{{ results.ansible_job_id }}"
+      register: async_poll_results
+      until: async_poll_results.finished
+      retries: "{{ nim_alt_disk_migration_retry_chk_nimadm_comp }}"
+      delay: "{{ nim_alt_disk_migration_interval }}"
+
+    - ansible.builtin.debug:  # var=async_poll_results
+        msg: retry = {{ nim_alt_disk_migration_retry_chk_nimadm_comp }}
+
+    - ansible.builtin.debug:
+        msg: '" PARALLEL MIGRATION COMPLETE!!!"'
+
+    - name: End play as parallel migration was completed
+      meta: end_host
+
+
+#############################################################
+#############################################################
+
+# This part will only run in case of single client migration
 - name: Fail if a NIM LPP resource is not specified
   ansible.builtin.fail:
     msg: NIM LPP resource not specified

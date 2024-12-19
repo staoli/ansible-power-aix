@@ -2,7 +2,7 @@
 argument_specs:
   main:
     short_description: >
-      This role is used to migrate a client OS levels from
+      This role is used to migrate single/multiple client OS levels from
       AIX 7.1/7.2 to AIX 7.3.
     author:
       - Joseph de Joya
@@ -11,14 +11,14 @@ argument_specs:
     options:
       nim_alt_disk_migration_nim_client:
         type: str
-        required: true
+        required: false
         description: >
           Specifies a NIM object name that is associated to
           the NIM client LPAR to be migrated.
 
       nim_alt_disk_migration_target_disk:
         type: dict
-        required: true
+        required: false
         description: >
           Specifies the physical volume or a disk size policy
           used to automatically determine a valid physical volume
@@ -53,7 +53,7 @@ argument_specs:
 
       nim_alt_disk_migration_lpp_source:
         type: str
-        required: true
+        required: false
         description: >
           Specifies a NIM object name associated to a LPP
           resource for the desired level of migration.
@@ -107,7 +107,7 @@ argument_specs:
 
       nim_alt_disk_migration_control_phases:
         type: dict
-        required: true
+        required: false
         description: >
           Allows skipping or stopping at certain validations of
           the nim_alt_disk_migration role.

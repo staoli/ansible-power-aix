@@ -35,3 +35,6 @@ nim_alt_disk_migration_spot: ""
 nim_alt_disk_migration_lpp_source_fileset_level: ""
 # Idempotency check.
 nim_alt_disk_migration_no_need_to_migrate: false
+
+# By default normal migration will run and not parallel migration
+nim_alt_disk_migration_parallel_migration: false

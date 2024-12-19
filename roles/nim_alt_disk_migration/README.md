@@ -1,7 +1,7 @@
 # Ansible Role: nim_alt_disk_migration
 The [IBM Power Systems AIX](../../README.md) collection provides an 
 [Ansible role](https://docs.ansible.com/ansible/latest/user_guide/playbooks_reuse_roles.html), 
-referred to as `nim_alt_disk_migration`, which assists in automating in migration in 
+referred to as `nim_alt_disk_migration`, which assists in automating in 
 migration of AIX 7.1/7.2 to AIX 7.3.
 
 For guides and reference, see the [Docs Site](https://ibm.github.io/ansible-power-aix/roles.html).
@@ -33,7 +33,7 @@ Available variables are listed below, along with default values:
         <tr>
             <td><b> nim_alt_disk_migration_nim_client </b></td>
             <td>  </td>
-            <td> true </td>
+            <td> false </td>
             <td>  </td>
             <td>  </td>
             <td> 
@@ -44,7 +44,7 @@ Available variables are listed below, along with default values:
         <tr>
             <td><b> nim_alt_disk_migration_target_disk </b></td>
             <td>  </td>
-            <td> true </td>
+            <td> false </td>
             <td>  </td>
             <td>  </td>
             <td>  </td>
@@ -100,7 +100,7 @@ Available variables are listed below, along with default values:
         <tr>
             <td><b> nim_alt_disk_migration_lpp_source  </b></td>
             <td>  </td>
-            <td> true </td>
+            <td> false </td>
             <td>  </td>
             <td>  </td>
             <td> 
@@ -182,6 +182,29 @@ Available variables are listed below, along with default values:
             </td>
         </tr>
         <tr>
+            <td><b> nim_alt_disk_migration_prallel_migration </b></td>
+            <td>  </td>
+            <td> false </td>
+            <td> false </td>
+            <td>  </td>
+            <td> 
+                Specifies if multiple clients need to be migrated
+                parallely.
+            </td>
+        </tr>
+        <tr>
+            <td><b> nim_alt_disk_migration_client_data </b></td>
+            <td>  </td>
+            <td> false </td>
+            <td>  </td>
+            <td>  </td>
+            <td> 
+                Specifies location of the file containing information
+                about clients that need to be migrated in case of
+                parallel migration.
+            </td>
+        </tr>
+        <tr>
             <td><b> nim_alt_disk_migration_control_phases </b></td>
             <td>  </td>
             <td> false </td>
@@ -225,6 +248,14 @@ enough to contain the used PPs.
 variable is not required.
 - if a **nim_alt_disk_migration_spot** is not specified, one will be automatically created using the specified
 **nim_alt_disk_migration_lpp_source**.
+- In case of parallel migration, **nim_alt_disk_client_data** needs to be provided.
+- The JSON file containing information about the client needs to be created before triggering parallel migration.
+This file can be created using "nimadm -n -Y" command or manually.
+- In case of parallel migration, It is recommended to increase the proc_units allocated to the server for faster migration.
+If X number of CPU processors are dedicated to NIM master, then 3 x X clients can be migrated in parallel, efficiently.
+- Parallel migration is only possible with minimum AIX 7.3.3
+- Refer [nimadm documentation](https://www.ibm.com/docs/en/aix/7.3?topic=n-nimadm-command) for additional information
+related to parallel/concurrent migration.
 
 ## Dependencies
 

@@ -276,7 +276,7 @@ def compare_attrs(module):
 
     line2 = lines2[1].split()
     for it in range(8):
-        if fs_attrs[it] in current_attributes.keys() and line2[it] == "--":
+        if fs_attrs[it] in current_attributes.keys() and current_attributes[fs_attrs[it]] != "--":
             continue
         current_attributes[fs_attrs[it]] = line2[it]
 
@@ -287,17 +287,19 @@ def compare_attrs(module):
         "inline log size": "logsize"
     }
 
-    for it in lines2[2].split(","):
-        curr_attr = it.split(":")
-        attr_key = curr_attr[0].strip().lower()
-        if attr_key in mapped_key.keys():
-            attr_key = mapped_key[attr_key]
-        attr_val = curr_attr[1].strip()
-        if attr_key[0] == "(":
-            attr_key = attr_key[1:]
-        if attr_val[-1] == ")":
-            attr_val = attr_val[:-1]
-        current_attributes[attr_key] = attr_val
+    # In case of non-JFS/JFS2 fs, lsfs -q provides less information (no info inside brackets)
+    if len(lines2) >= 3:
+        for it in lines2[2].split(","):
+            curr_attr = it.split(":")
+            attr_key = curr_attr[0].strip().lower()
+            attr_val = curr_attr[1].strip()
+            if attr_key[0] == "(":
+                attr_key = attr_key[1:]
+            if attr_val[-1] == ")":
+                attr_val = attr_val[:-1]
+            if attr_key in mapped_key.keys():
+                attr_key = mapped_key[attr_key]
+            current_attributes[attr_key] = attr_val
 
     amount = module.params["auto_mount"]
     perms = module.params["permissions"]
@@ -333,6 +335,8 @@ def compare_attrs(module):
             val = attrs[1].strip()
             val = val.strip('\"')  # For case when variables are used while providing values to attributes
             if attr == "log" or attr == "logname":
+                if val == "INLINE":
+                    val = "yes"
                 if current_attributes['inline log'] and val != current_attributes['inline log']:
                     updated_attrs.append(f"{attr}={val}")
                 continue
@@ -349,7 +353,7 @@ def compare_attrs(module):
                 block_size = int(current_attributes["block size"]) // 1024
                 val = str(int(val) * block_size * 512)
 
-            if attr not in current_attributes.keys() or val != current_attributes[attr]:
+            if attr not in current_attributes.keys() or val not in current_attributes[attr].split(','):
                 updated_attrs.append(f"{attr}={val}")
 
     if check_other_perms == 4 and len(updated_attrs) == 0:
